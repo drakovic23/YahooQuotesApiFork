@@ -2,6 +2,9 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace YahooQuotesApi;
 
@@ -52,7 +55,7 @@ public sealed class YahooHistory
             nameof(SplitTick) => "split",
             _ => throw new TypeAccessException("tick")
         };
-        const string address = "https://query2.finance.yahoo.com/v7/finance/download/";
+        const string address = "https://query2.finance.yahoo.com/v8/finance/chart/"; //New uri
         string url = $"{address}{symbol}?period1={(Start == Instant.MinValue ? 0 : Start.ToUnixTimeSeconds())}" +
             $"&period2={Instant.MaxValue.ToUnixTimeSeconds()}&interval=1{frequency.Name()}&events={parm}";
         return new Uri(url);
@@ -63,18 +66,28 @@ public sealed class YahooHistory
         Logger.LogInformation("{Url}", uri.ToString());
 
         HttpClient httpClient = HttpClientFactory.CreateClient("HttpV2");
-        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/csv"));
+        //httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/csv"));
+        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         using HttpResponseMessage response = await httpClient.GetAsync(uri, ct).ConfigureAwait(false);
+        
+
+
+        //Parse here
+
         if (response.StatusCode == HttpStatusCode.NotFound)
             return Result<ITick[]>.Fail("History not found.");
         try
         {
             response.EnsureSuccessStatusCode();
-
+           
             using Stream stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            using StreamReader streamReader = new(stream);
-            ITick[] ticks = await streamReader.ToTicks<T>(Logger).ConfigureAwait(false);
+            //JsonObject x = await response.Content.ReadFromJsonAsync();
+            using JsonDocument jsonDocument = await JsonDocument.ParseAsync(stream,default,ct).ConfigureAwait(false);
+            //using StreamReader streamReader = new(stream);
+            //ITick[] ticks = await streamReader.ToTicks<T>(Logger).ConfigureAwait(false);
+
+            ITick[] ticks = await jsonDocument.ToTicks<T>(Logger).ConfigureAwait(false);
             return ticks.ToResult();
         }
 #pragma warning disable CA1031 // catch a more specific allowed exception type 
