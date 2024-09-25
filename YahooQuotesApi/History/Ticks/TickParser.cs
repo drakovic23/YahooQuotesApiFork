@@ -2,14 +2,13 @@
 using NodaTime.Text;
 using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace YahooQuotesApi;
 
-internal static class TickParser //This would have to be adjusted so instead of CSV data, the JSON data is parsed
+internal static class TickParser
 {
-    private static readonly LocalDatePattern DatePattern = LocalDatePattern.CreateWithInvariantCulture("yyyy-MM-dd");
-
     internal static async Task<ITick[]> ToTicks<T>(this JsonDocument jsonDocument, ILogger logger) where T : ITick
     {
         // Sometimes currencies end with two rows having the same date.
@@ -19,7 +18,7 @@ internal static class TickParser //This would have to be adjusted so instead of 
 
         //ITick[] ticks;
         var root = jsonDocument.RootElement;
-        
+
         if (typeof(T) == typeof(PriceTick))
         {
             var timestamps = root.GetProperty("chart").GetProperty("result")[0].GetProperty("timestamp").EnumerateArray();
@@ -34,13 +33,13 @@ internal static class TickParser //This would have to be adjusted so instead of 
             var adjCloses = root.GetProperty("chart").GetProperty("result")[0].GetProperty("indicators")
                 .GetProperty("adjclose")[0].GetProperty("adjclose").EnumerateArray();
 
-            var timeIter = timestamps.GetEnumerator();
-            var openIter = opens.GetEnumerator();
-            var highIter = highs.GetEnumerator();
-            var lowIter = lows.GetEnumerator();
-            var closeIter = closes.GetEnumerator();
-            var volumeIter = volumes.GetEnumerator();
-            var adjCloseIter = adjCloses.GetEnumerator();
+            using var timeIter = timestamps.GetEnumerator();
+            using var openIter = opens.GetEnumerator();
+            using var highIter = highs.GetEnumerator();
+            using var lowIter = lows.GetEnumerator();
+            using var closeIter = closes.GetEnumerator();
+            using var volumeIter = volumes.GetEnumerator();
+            using var adjCloseIter = adjCloses.GetEnumerator();
 
             while (timeIter.MoveNext() && openIter.MoveNext() && highIter.MoveNext() &&
                 lowIter.MoveNext() && closeIter.MoveNext() && volumeIter.MoveNext() && adjCloseIter.MoveNext())
@@ -68,9 +67,9 @@ internal static class TickParser //This would have to be adjusted so instead of 
         }
         else if (typeof(T) == typeof(SplitTick))
         {
-            //Splits data
+            //Stock Split events
             JsonElement splits = root.GetProperty("chart").GetProperty("result")[0].GetProperty("events")
-                            .GetProperty("splits");//.EnumerateArray();
+                            .GetProperty("splits");
 
             foreach(JsonProperty element in splits.EnumerateObject())
             {
@@ -86,7 +85,6 @@ internal static class TickParser //This would have to be adjusted so instead of 
                         AfterSplit: after.GetDouble()
                         );
 
-                    Console.WriteLine(splitTick.BeforeSplit);
                     ticks[splitTick.Date] = splitTick;
                 }
                 else
@@ -134,16 +132,6 @@ internal static class TickParser //This would have to be adjusted so instead of 
     private static DateTimeOffset ConvertFromUnixTimestamp(long timestamp)
     {
         return DateTimeOffset.FromUnixTimeSeconds(timestamp);
-    }
-
-    internal static LocalDate ToDate(this string str)
-    {
-        // NodaTime does not yet support Span<char>.
-        ParseResult<LocalDate> result = DatePattern.Parse(str);
-        if (result.Success)
-            return result.Value;
-
-        throw new InvalidDataException($"Could not convert '{str}' to LocalDate.", result.Exception);
     }
 
     internal static double ToDouble(this string str)

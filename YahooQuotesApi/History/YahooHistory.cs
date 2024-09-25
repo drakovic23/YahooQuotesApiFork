@@ -70,10 +70,6 @@ public sealed class YahooHistory
         httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         using HttpResponseMessage response = await httpClient.GetAsync(uri, ct).ConfigureAwait(false);
-        
-
-
-        //Parse here
 
         if (response.StatusCode == HttpStatusCode.NotFound)
             return Result<ITick[]>.Fail("History not found.");
